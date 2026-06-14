@@ -1,25 +1,20 @@
-print("🚀 Bot iniciando...")
 import os
+import re
 from datetime import datetime
 from telegram import Update
 from telegram.ext import Application, MessageHandler, ContextTypes, filters
 from supabase import create_client
 
-# 🔐 Conexión a Supabase
+# 🔐 Conexión Supabase
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-try:
-    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-    print("✅ Supabase conectado")
-except Exception as e:
-    print("❌ Error Supabase:", e)
-    supabase = None
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# 🧠 extraer monto del texto
+# 🧠 extraer monto de cualquier texto
 def extraer_monto(texto):
-    numeros = ''.join(c for c in texto if c.isdigit())
-    return int(numeros) if numeros else 0
+    numeros = re.findall(r'\d+', texto)
+    return int(numeros[0]) if numeros else 0
 
 
 async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -28,7 +23,7 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     fecha = datetime.now().isoformat()
 
     # 💰 VENTAS
-    if any(x in mensaje for x in [
+    if any(p in mensaje for p in [
         "corte", "balayage", "tintura", "manicure", "pedicure", "venta"
     ]):
         supabase.table("ventas").insert({
@@ -37,13 +32,11 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "fecha": fecha
         }).execute()
 
-        await update.message.reply_text(
-            f"💰 Venta registrada\nMonto: ${monto}"
-        )
+        await update.message.reply_text(f"💰 Venta registrada: ${monto}")
         return
 
     # 💸 GASTOS
-    if any(x in mensaje for x in [
+    elif any(p in mensaje for p in [
         "compré", "compre", "gasté", "gaste", "pagué", "pague",
         "shampoo", "insumo", "esmalte", "tinte"
     ]):
@@ -53,9 +46,7 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "fecha": fecha
         }).execute()
 
-        await update.message.reply_text(
-            f"💸 Gasto registrado\nMonto: ${monto}"
-        )
+        await update.message.reply_text(f"💸 Gasto registrado: ${monto}")
         return
 
     # 📊 RESUMEN
@@ -68,19 +59,19 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ganancia = total_ventas - total_gastos
 
         await update.message.reply_text(
-            f"📊 RESUMEN GENERAL\n"
+            f"📊 RESUMEN GENERAL\n\n"
             f"💰 Ventas: ${total_ventas}\n"
             f"💸 Gastos: ${total_gastos}\n"
             f"📈 Ganancia: ${ganancia}"
         )
         return
 
-    # 💡 AYUDA
+    # 💡 MENSAJE DE AYUDA
     await update.message.reply_text(
-        "💇 COMANDOS:\n\n"
+        "💇 COMANDOS DEL SALÓN\n\n"
         "💰 Venta: Corte varón 7000\n"
         "💸 Gasto: Compré shampoo 13000\n"
-        "📊 Resumen\n"
+        "📊 Resumen"
     )
 
 
@@ -92,12 +83,14 @@ def main():
         return
 
     if not SUPABASE_URL or not SUPABASE_KEY:
-        print("❌ Falta configuración Supabase")
+        print("❌ Falta Supabase config")
         return
 
     app = Application.builder().token(token).build()
 
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, responder))
+    app.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, responder)
+    )
 
     print("💇 Bot del salón activo...")
     app.run_polling()
