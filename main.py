@@ -2,63 +2,68 @@ import os
 from datetime import datetime
 from telegram import Update
 from telegram.ext import Application, MessageHandler, ContextTypes, filters
+from supabase import create_client
 
-# Memoria simple (por ahora en RAM)
-ventas = []
-gastos = []
+# 🔐 Conexión Supabase
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def extraer_monto(texto):
     numeros = ''.join(c for c in texto if c.isdigit())
     return int(numeros) if numeros else 0
 
 async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global ventas, gastos
-
     mensaje = update.message.text.lower()
     monto = extraer_monto(mensaje)
-    fecha = datetime.now().strftime("%Y-%m-%d %H:%M")
+    fecha = datetime.now().isoformat()
 
     # 💰 VENTAS
     if any(x in mensaje for x in ["corte", "balayage", "tintura", "manicure", "pedicure", "venta"]):
-        ventas.append({"texto": mensaje, "monto": monto, "fecha": fecha})
+        supabase.table("ventas").insert({
+            "texto": mensaje,
+            "monto": monto,
+            "fecha": fecha
+        }).execute()
 
-        await update.message.reply_text(
-            f"💰 Venta registrada\nMonto: ${monto}\n📅 {fecha}"
-        )
+        await update.message.reply_text(f"💰 Venta guardada: ${monto}")
         return
 
     # 💸 GASTOS
     if any(x in mensaje for x in ["compré", "compre", "gasté", "gaste", "pagué", "pague"]):
-        gastos.append({"texto": mensaje, "monto": monto, "fecha": fecha})
+        supabase.table("gastos").insert({
+            "texto": mensaje,
+            "monto": monto,
+            "fecha": fecha
+        }).execute()
 
-        await update.message.reply_text(
-            f"💸 Gasto registrado\nMonto: ${monto}\n📅 {fecha}"
-        )
+        await update.message.reply_text(f"💸 Gasto guardado: ${monto}")
         return
 
     # 📊 RESUMEN
     if "resumen" in mensaje:
+        ventas = supabase.table("ventas").select("*").execute().data
+        gastos = supabase.table("gastos").select("*").execute().data
+
         total_ventas = sum(v["monto"] for v in ventas)
         total_gastos = sum(g["monto"] for g in gastos)
         ganancia = total_ventas - total_gastos
 
         await update.message.reply_text(
-            f"📊 RESUMEN\n"
+            f"📊 RESUMEN TOTAL\n"
             f"💰 Ventas: ${total_ventas}\n"
             f"💸 Gastos: ${total_gastos}\n"
             f"📈 Ganancia: ${ganancia}"
         )
         return
 
-    # 🧴 INVENTARIO (simple por ahora)
-    if "stock" in mensaje:
-        await update.message.reply_text("🧴 Inventario en desarrollo (próximo paso)")
-        return
-
     await update.message.reply_text(
-        "💇 No entendí\nEscribe por ejemplo:\n- Corte varón 7000\n- Compré shampoo 13000\n- Resumen"
+        "💇 Escribe:\n"
+        "- Corte varón 7000\n"
+        "- Compré shampoo 13000\n"
+        "- Resumen"
     )
-
 
 def main():
     token = os.getenv("TOKEN")
@@ -67,9 +72,8 @@ def main():
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, responder))
 
-    print("Bot iniciado...")
+    print("Bot activo...")
     app.run_polling()
-
 
 if __name__ == "__main__":
     main()
