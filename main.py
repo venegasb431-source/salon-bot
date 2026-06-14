@@ -1,3 +1,4 @@
+print("🚀 Bot iniciando...")
 import os
 from datetime import datetime
 from telegram import Update
@@ -8,7 +9,12 @@ from supabase import create_client
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+try:
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    print("✅ Supabase conectado")
+except Exception as e:
+    print("❌ Error Supabase:", e)
+    supabase = None
 
 # 🧠 extraer monto del texto
 def extraer_monto(texto):
